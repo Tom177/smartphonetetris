@@ -1,0 +1,139 @@
+import random
+import kivy
+from kivy.app import App
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Rectangle
+from kivy.clock import Clock
+from kivy.uix.label import Label
+from kivy.core.window import Window
+
+kivy.require('2.1.0')  # Kivyバージョンの確認
+
+# ゲーム設定
+SCREEN_WIDTH = 300
+SCREEN_HEIGHT = 600
+BLOCK_SIZE = 30
+GAME_AREA_WIDTH = SCREEN_WIDTH // BLOCK_SIZE
+GAME_AREA_HEIGHT = SCREEN_HEIGHT // BLOCK_SIZE
+
+# 色の設定
+WHITE = (1, 1, 1)
+CYAN = (0, 1, 1)
+YELLOW = (1, 1, 0)
+GREEN = (0, 1, 0)
+RED = (1, 0, 0)
+BLUE = (0, 0, 1)
+ORANGE = (1, 0.65, 0)
+
+# テトリスブロックの形状
+SHAPES = [
+    [[1, 1, 1, 1]],  # I
+    [[1, 1], [1, 1]],  # O
+    [[0, 1, 0], [1, 1, 1]],  # T
+    [[1, 1, 0], [0, 1, 1]],  # S
+    [[0, 1, 1], [1, 1, 0]],  # Z
+    [[1, 0, 0], [1, 1, 1]],  # L
+    [[0, 0, 1], [1, 1, 1]],  # J
+]
+
+SHAPE_COLORS = [CYAN, YELLOW, GREEN, RED, BLUE, ORANGE]
+
+# Kivyのウィジェット（ゲームエリアの表示）
+class TetrisGame(Widget):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.board = [[0] * GAME_AREA_WIDTH for _ in range(GAME_AREA_HEIGHT)]
+        self.current_piece = self.new_piece()
+        self.current_pos = [0, GAME_AREA_WIDTH // 2 - len(self.current_piece[0]) // 2]
+        self.game_over = False
+
+        # タッチ入力
+        Window.bind(on_touch_down=self.on_touch_down)
+
+        # ゲームループの開始
+        Clock.schedule_interval(self.update, 1 / 10)
+
+    def new_piece(self):
+        shape = random.choice(SHAPES)
+        color = SHAPE_COLORS[SHAPES.index(shape)]
+        return shape, color
+
+    def valid_move(self, piece, offset):
+        shape, _ = piece
+        for y, row in enumerate(shape):
+            for x, cell in enumerate(row):
+                if cell:
+                    new_x = self.current_pos[1] + x + offset[1]
+                    new_y = self.current_pos[0] + y + offset[0]
+                    if new_x < 0 or new_x >= GAME_AREA_WIDTH or new_y >= GAME_AREA_HEIGHT or self.board[new_y][new_x]:
+                        return False
+        return True
+
+    def rotate_piece(self):
+        shape, color = self.current_piece
+        rotated = [list(row) for row in zip(*shape[::-1])]
+        if self.valid_move((rotated, color), [0, 0]):
+            self.current_piece = (rotated, color)
+
+    def move_piece(self, dx, dy):
+        if not self.game_over and self.valid_move(self.current_piece, [dy, dx]):
+            self.current_pos[0] += dy
+            self.current_pos[1] += dx
+        elif dy > 0:
+            self.place_piece()
+
+    def place_piece(self):
+        shape, color = self.current_piece
+        for y, row in enumerate(shape):
+            for x, cell in enumerate(row):
+                if cell:
+                    self.board[self.current_pos[0] + y][self.current_pos[1] + x] = color
+        self.clear_lines()
+        self.current_piece = self.new_piece()
+        self.current_pos = [0, GAME_AREA_WIDTH // 2 - len(self.current_piece[0]) // 2]
+        if not self.valid_move(self.current_piece, [0, 0]):
+            self.game_over = True
+
+    def clear_lines(self):
+        full_lines = [i for i, row in enumerate(self.board) if all(cell != 0 for cell in row)]
+        for line in full_lines:
+            del self.board[line]
+            self.board.insert(0, [0] * GAME_AREA_WIDTH)
+
+    def draw(self):
+        self.canvas.clear()
+
+        # ゲームボードの描画
+        with self.canvas:
+            for y, row in enumerate(self.board):
+                for x, cell in enumerate(row):
+                    if cell:
+                        Color(*cell)
+                        Rectangle(pos=(x * BLOCK_SIZE, (GAME_AREA_HEIGHT - y - 1) * BLOCK_SIZE), size=(BLOCK_SIZE, BLOCK_SIZE))
+
+            shape, color = self.current_piece
+            for y, row in enumerate(shape):
+                for x, cell in enumerate(row):
+                    if cell:
+                        Color(*color)
+                        Rectangle(pos=((self.current_pos[1] + x) * BLOCK_SIZE, (GAME_AREA_HEIGHT - self.current_pos[0] - y - 1) * BLOCK_SIZE), size=(BLOCK_SIZE, BLOCK_SIZE))
+
+    def on_touch_down(self, instance, touch):
+        # スマホでのタッチ操作
+        if touch.x < Window.width / 2:
+            self.move_piece(-1, 0)  # 左に移動
+        else:
+            self.move_piece(1, 0)   # 右に移動
+
+    def update(self, dt):
+        if not self.game_over:
+            self.move_piece(0, 1)  # ピースを下に移動
+            self.draw()
+
+# アプリのクラス
+class TetrisApp(App):
+    def build(self):
+        return TetrisGame()
+
+if __name__ == '__main__':
+    TetrisApp().run()
